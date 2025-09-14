@@ -132,3 +132,15 @@ class Broker:
         except Exception as e:
             print(f"BROKER: Error fetching orders: {e}")
             return None
+
+    def get_quotes(self, symbols):
+        """Fetches quotes for a list of symbols."""
+        if not self.kite: return None
+        try:
+            # The quote method in kiteconnect expects symbols in the format 'EXCHANGE:TRADINGSYMBOL'
+            # Assuming NSE for all symbols for now.
+            instruments = [f"NSE:{symbol}" for symbol in symbols]
+            return self.kite.quote(instruments)
+        except Exception as e:
+            print(f"BROKER: Error fetching quotes: {e}")
+            return None

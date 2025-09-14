@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Strategy 2 - Trading Terminal{% endblock %}
+{% block content %}
+<h2>Strategy 2</h2>
+<p>This page will display the status of Strategy 2.</p>
+<div class="panel">
+    <h3>Selected Stocks for Today</h3>
+    <div id="selected-stocks">
+        {% if selected_stocks %}
+            <ul>
+                {% for stock in selected_stocks %}
+                    <li>{{ stock.tradingsymbol }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No stocks selected for trading today.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
