@@ -43,3 +43,15 @@ This is a web-based trading terminal that implements a simple VWAP (Volume Weigh
 4.  After entering your credentials, you will be redirected to the Kite login page to authorize the application.
 
 5.  Once authorized, you will be redirected back to the trading terminal, where you can see your account details and the strategy status.
+
+### Important Note on Nifty 500 Stock List
+
+The `nifty500.txt` file in this repository contains a small sample of stocks for testing purposes. For the "Strategy 2" feature to work as intended, you must replace the contents of this file with the complete list of Nifty 500 stock symbols.
+
+## Production Deployment
+
+**Important Note:** The current implementation uses background threads for the strategy schedulers and traders. This approach works well for local development but is not suitable for a production WSGI environment (like the one used by PythonAnywhere).
+
+For a production deployment, you will need to refactor the background tasks to use a more robust solution, such as:
+-   **A separate worker process and a task queue (e.g., Celery, RQ).**
+-   **Cron jobs** to run the scheduled tasks.

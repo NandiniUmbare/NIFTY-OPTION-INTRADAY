@@ -6,7 +6,7 @@ import pandas as pd
 import schedule
 import data_handler
 import strategy
-from strategy2 import Strategy2
+import strategy2
 from broker_connection import Broker
 
 # --- Global State Management ---
@@ -36,7 +36,6 @@ def run_simulation_thread():
     """
     global app_state, state_lock
 
-    # Wait until the user has "logged in" and the strategy processor is created
     while app_state.get('strategy_processor') is None:
         time.sleep(1)
 
@@ -55,22 +54,25 @@ def run_simulation_thread():
             if processor:
                 app_state["latest_strategy_state"] = processor.process_tick(tick)
 
-# --- Web App Routes ---
+def run_strategy2_trader():
+    """
+    This function runs in a background thread and executes the trading logic
+    for Strategy 2 every 5 minutes.
+    """
+    while True:
+        with state_lock:
+            selected_stocks = app_state.get('strategy2_selected_stocks', [])
+            broker = app_state['broker']
+            if not broker or not broker.access_token:
+                time.sleep(60)
+                continue
 
-@app.route('/')
-@login_required
-def index():
-    return render_template('home.html')
+        if selected_stocks:
+            print("Trader: Running trade logic for Strategy 2...")
+            for stock in selected_stocks:
+                strategy2.run_trade_logic(broker, stock['tradingsymbol'])
 
-@app.route('/strategy')
-@login_required
-def strategy_page():
-    return render_template('strategy.html')
-
-@app.route('/backtesting')
-@login_required
-def backtesting_page():
-    return render_template('backtesting.html')
+        time.sleep(300)
 
 def run_strategy2_scheduler():
     """
@@ -81,29 +83,33 @@ def run_strategy2_scheduler():
         print("Scheduler: Running daily stock selection for Strategy 2...")
         with state_lock:
             broker = app_state['broker']
-            # The job should only run if the user is logged in
             if not broker or not broker.access_token:
                 print("Scheduler: User not logged in. Skipping stock selection.")
                 return
 
-        strategy2 = Strategy2(broker)
-        selected_stocks = strategy2.select_stocks_for_the_day()
+        selected_stocks = strategy2.select_stocks_for_the_day(broker)
 
         with state_lock:
             app_state['strategy2_selected_stocks'] = selected_stocks
 
         print(f"Scheduler: Selected stocks for today: {[s['tradingsymbol'] for s in selected_stocks]}")
 
-    # Schedule the job to run every day at 09:30.
-    # Note: This uses the server's local time.
     schedule.every().day.at("09:30").do(select_stocks_job)
-
-    # For testing, you can run it more frequently, e.g., every minute:
-    # schedule.every(1).minutes.do(select_stocks_job)
 
     while True:
         schedule.run_pending()
         time.sleep(1)
+
+# --- Web App Routes ---
+@app.route('/')
+@login_required
+def index():
+    return render_template('home.html')
+
+@app.route('/strategy')
+@login_required
+def strategy_page():
+    return render_template('strategy.html')
 
 @app.route('/strategy2')
 @login_required
@@ -112,13 +118,13 @@ def strategy2_page():
         selected_stocks = app_state.get('strategy2_selected_stocks', [])
     return render_template('strategy2.html', selected_stocks=selected_stocks)
 
+@app.route('/backtesting')
+@login_required
+def backtesting_page():
+    return render_template('backtesting.html')
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """
-    Handles the login process.
-    GET: Displays the login page.
-    POST: Receives API credentials, stores them, and redirects to Kite for authentication.
-    """
     if request.method == 'POST':
         api_key = request.form.get('api_key')
         api_secret = request.form.get('api_secret')
@@ -131,7 +137,6 @@ def login():
             login_url = broker.get_login_url()
 
         if login_url:
-            print(f"Redirecting to Kite login: {login_url}")
             return redirect(login_url)
         else:
             return render_template('login.html', error="Could not generate login URL.")
@@ -140,10 +145,6 @@ def login():
 
 @app.route('/connect/kite')
 def kite_callback():
-    """
-    Handles the callback from the broker after user login.
-    Exchanges the request_token for an access_token.
-    """
     request_token = request.args.get("request_token")
     if not request_token:
         return "Error: No request_token found.", 400
@@ -151,10 +152,8 @@ def kite_callback():
     with state_lock:
         broker = app_state['broker']
         if broker.set_access_token(request_token):
-            # Login successful, now create the strategy processor with the broker instance
             app_state['strategy_processor'] = strategy.StrategyProcessor(broker)
             app_state['strategy_processor'].log.append("Broker connection successful.")
-            print("Login successful, redirecting to terminal.")
             return redirect('/')
         else:
             return "Failed to generate access token.", 400
@@ -164,14 +163,14 @@ def status():
     with state_lock:
         broker = app_state['broker']
         strategy_state = app_state.get('latest_strategy_state')
+        strategy2_state = strategy2.get_strategy2_state()
 
-        # Base data structure
         response_data = {
             "strategy_state": format_state_for_json(strategy_state) if strategy_state else {},
-            "account": {}
+            "account": {},
+            "strategy2": strategy2_state
         }
 
-        # Fetch account details if broker is connected
         if broker and broker.access_token:
             margins = broker.get_margins()
             if margins:
@@ -179,9 +178,6 @@ def status():
 
             positions = broker.get_positions()
             if positions:
-                # Calculate total P&L from all positions
-                total_pnl = sum(pos.get('pnl', 0) for pos in positions.get('net', []))
-                response_data["account"]["pnl"] = f"{total_pnl:.2f}"
                 response_data["account"]["positions"] = positions.get('net', [])
 
             holdings = broker.get_holdings()
@@ -190,12 +186,7 @@ def status():
 
             orders = broker.get_orders()
             if orders:
-                # Filter for open orders
-                open_orders = [
-                    order for order in orders
-                    if order.get('status') in ['OPEN', 'TRIGGER PENDING']
-                ]
-                response_data["account"]["orders"] = open_orders
+                response_data["account"]["orders"] = [o for o in orders if o.get('status') in ['OPEN', 'TRIGGER PENDING']]
 
     return jsonify(response_data)
 
@@ -238,12 +229,10 @@ def format_state_for_json(state):
     }
 
 if __name__ == '__main__':
-    # Start the simulation thread for the first strategy
     simulation_thread = threading.Thread(target=run_simulation_thread, daemon=True)
     simulation_thread.start()
-
-    # Start the scheduler thread for Strategy 2
     strategy2_scheduler_thread = threading.Thread(target=run_strategy2_scheduler, daemon=True)
     strategy2_scheduler_thread.start()
-
+    strategy2_trader_thread = threading.Thread(target=run_strategy2_trader, daemon=True)
+    strategy2_trader_thread.start()
     app.run(debug=False, host='0.0.0.0', port=8080)
