@@ -96,3 +96,39 @@ class Broker:
         # For simulation, we just return a dummy success response.
         print("BROKER: Simulating successful position close.")
         return {'status': 'success'}
+
+    def get_margins(self):
+        """Fetches margin details."""
+        if not self.kite: return None
+        try:
+            return self.kite.margins()
+        except Exception as e:
+            print(f"BROKER: Error fetching margins: {e}")
+            return None
+
+    def get_positions(self):
+        """Fetches current positions."""
+        if not self.kite: return None
+        try:
+            return self.kite.positions()
+        except Exception as e:
+            print(f"BROKER: Error fetching positions: {e}")
+            return None
+
+    def get_holdings(self):
+        """Fetches holdings."""
+        if not self.kite: return None
+        try:
+            return self.kite.holdings()
+        except Exception as e:
+            print(f"BROKER: Error fetching holdings: {e}")
+            return None
+
+    def get_orders(self):
+        """Fetches all orders for the day."""
+        if not self.kite: return None
+        try:
+            return self.kite.orders()
+        except Exception as e:
+            print(f"BROKER: Error fetching orders: {e}")
+            return None

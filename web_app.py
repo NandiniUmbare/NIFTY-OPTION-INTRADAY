@@ -100,11 +100,42 @@ def kite_callback():
 @app.route('/status')
 def status():
     with state_lock:
-        # Prevent error if status is requested before first tick
-        if app_state.get('latest_strategy_state') is None:
-            return jsonify({})
-        state_json = format_state_for_json(app_state['latest_strategy_state'])
-    return jsonify(state_json)
+        broker = app_state['broker']
+        strategy_state = app_state.get('latest_strategy_state')
+
+        # Base data structure
+        response_data = {
+            "strategy_state": format_state_for_json(strategy_state) if strategy_state else {},
+            "account": {}
+        }
+
+        # Fetch account details if broker is connected
+        if broker and broker.access_token:
+            margins = broker.get_margins()
+            if margins:
+                response_data["account"]["funds"] = margins.get('equity', {}).get('available', {}).get('cash', 'N/A')
+
+            positions = broker.get_positions()
+            if positions:
+                # Calculate total P&L from all positions
+                total_pnl = sum(pos.get('pnl', 0) for pos in positions.get('net', []))
+                response_data["account"]["pnl"] = f"{total_pnl:.2f}"
+                response_data["account"]["positions"] = positions.get('net', [])
+
+            holdings = broker.get_holdings()
+            if holdings:
+                response_data["account"]["holdings"] = holdings
+
+            orders = broker.get_orders()
+            if orders:
+                # Filter for open orders
+                open_orders = [
+                    order for order in orders
+                    if order.get('status') in ['OPEN', 'TRIGGER PENDING']
+                ]
+                response_data["account"]["orders"] = open_orders
+
+    return jsonify(response_data)
 
 @app.route('/pause', methods=['POST'])
 def pause():
