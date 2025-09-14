@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, render_template, redirect, request
+from functools import wraps
 import threading
 import time
 import pandas as pd
@@ -15,6 +16,15 @@ app_state = {
 }
 state_lock = threading.Lock()
 app = Flask(__name__)
+
+# --- Decorators ---
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if app_state.get('strategy_processor') is None:
+            return redirect('/login')
+        return f(*args, **kwargs)
+    return decorated_function
 
 def run_simulation_thread():
     """
@@ -45,11 +55,19 @@ def run_simulation_thread():
 # --- Web App Routes ---
 
 @app.route('/')
+@login_required
 def index():
-    # If the strategy processor hasn't been created, the user is not "logged in"
-    if app_state.get('strategy_processor') is None:
-        return 'Not logged in. Please <a href="/login">login with your API credentials</a> to start the terminal.'
-    return render_template('index.html')
+    return render_template('home.html')
+
+@app.route('/strategy')
+@login_required
+def strategy_page():
+    return render_template('strategy.html')
+
+@app.route('/backtesting')
+@login_required
+def backtesting_page():
+    return render_template('backtesting.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -85,57 +103,27 @@ def kite_callback():
     """
     request_token = request.args.get("request_token")
     if not request_token:
-        return redirect('/login?error=Failed to get request_token from Kite.')
+        return "Error: No request_token found.", 400
 
     with state_lock:
         broker = app_state['broker']
         if broker.set_access_token(request_token):
+            # Login successful, now create the strategy processor with the broker instance
             app_state['strategy_processor'] = strategy.StrategyProcessor(broker)
             app_state['strategy_processor'].log.append("Broker connection successful.")
             print("Login successful, redirecting to terminal.")
             return redirect('/')
         else:
-            return redirect('/login?error=Failed to generate access token. Check credentials.')
+            return "Failed to generate access token.", 400
 
 @app.route('/status')
 def status():
     with state_lock:
-        broker = app_state['broker']
-        strategy_state = app_state.get('latest_strategy_state')
-
-        # Base data structure
-        response_data = {
-            "strategy_state": format_state_for_json(strategy_state) if strategy_state else {},
-            "account": {}
-        }
-
-        # Fetch account details if broker is connected
-        if broker and broker.access_token:
-            margins = broker.get_margins()
-            if margins:
-                response_data["account"]["funds"] = margins.get('equity', {}).get('available', {}).get('cash', 'N/A')
-
-            positions = broker.get_positions()
-            if positions:
-                # Calculate total P&L from all positions
-                total_pnl = sum(pos.get('pnl', 0) for pos in positions.get('net', []))
-                response_data["account"]["pnl"] = f"{total_pnl:.2f}"
-                response_data["account"]["positions"] = positions.get('net', [])
-
-            holdings = broker.get_holdings()
-            if holdings:
-                response_data["account"]["holdings"] = holdings
-
-            orders = broker.get_orders()
-            if orders:
-                # Filter for open orders
-                open_orders = [
-                    order for order in orders
-                    if order.get('status') in ['OPEN', 'TRIGGER PENDING']
-                ]
-                response_data["account"]["orders"] = open_orders
-
-    return jsonify(response_data)
+        # Prevent error if status is requested before first tick
+        if app_state.get('latest_strategy_state') is None:
+            return jsonify({})
+        state_json = format_state_for_json(app_state['latest_strategy_state'])
+    return jsonify(state_json)
 
 @app.route('/pause', methods=['POST'])
 def pause():
