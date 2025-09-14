@@ -1,177 +1,90 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trading Terminal</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f4f6f9; color: #333; margin: 0; padding: 20px; }
-        .container { max-width: 900px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); overflow: hidden; }
-        header { background-color: #007bff; color: white; padding: 20px; text-align: center; }
-        h1, h2 { margin: 0; }
-        h2 { color: #007bff; border-bottom: 2px solid #f4f6f9; padding-bottom: 10px; margin-bottom: 15px; font-size: 1.2em;}
-        .content { padding: 20px; }
-        .panel { margin-bottom: 20px; }
-        .controls { text-align: center; padding-bottom: 20px; }
-        button { padding: 10px 25px; font-size: 1em; cursor: pointer; border: none; border-radius: 5px; margin: 0 10px; transition: background-color 0.3s; }
-        #btn-pause { background-color: #ffc107; color: #333; }
-        #btn-pause:hover { background-color: #e0a800; }
-        #btn-resume { background-color: #28a745; color: white; }
-        #btn-resume:hover { background-color: #218838; }
-        #log-panel { background-color: #212529; color: #f8f9fa; padding: 15px; height: 160px; overflow-y: auto; font-family: "Courier New", Courier, monospace; font-size: 0.9em; border-radius: 5px; }
-        #log-panel p { margin: 0; padding: 2px 0; border-bottom: 1px solid #495057; }
-        .data-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
-        .data-item { background: #f4f6f9; padding: 15px; border-radius: 5px; }
-        .data-item strong { color: #555; display: block; margin-bottom: 5px; }
-        .data-item span { font-weight: bold; font-size: 1.1em; }
-        #position-status { font-size: 1.1em; text-align: center; padding: 20px; background: #f4f6f9; border-radius: 5px;}
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
-        th { background-color: #007bff; color: white; }
-        tr:nth-child(even) { background-color: #f2f2f2; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Nifty VWAP Strategy Terminal</h1>
-        </header>
-        <div class="content">
-            <div class="panel controls">
-                <button id="btn-resume">Resume</button>
-                <button id="btn-pause">Pause</button>
-            </div>
+{% extends "base.html" %}
+{% block title %}Strategy - Trading Terminal{% endblock %}
 
-            <div class="panel">
-                <h2>Account Summary</h2>
-                <div class="data-grid">
-                    <div class="data-item"><strong>Available Funds:</strong> <span id="funds">--</span></div>
-                    <div class="data-item"><strong>Today's P&L:</strong> <span id="pnl">--</span></div>
-                </div>
-            </div>
+{% block content %}
+    <div class="panel controls">
+        <button id="btn-resume">Resume</button>
+        <button id="btn-pause">Pause</button>
+    </div>
 
-            <div class="panel">
-                <h2>Market Status</h2>
-                <div class="data-grid">
-                    <div class="data-item"><strong>Timestamp:</strong> <span id="timestamp">--</span></div>
-                    <div class="data-item"><strong>Price:</strong> <span id="price">--</span></div>
-                    <div class="data-item"><strong>VWAP:</strong> <span id="vwap">--</span></div>
-                    <div class="data-item"><strong>Upper Band:</strong> <span id="upper-band">--</span></div>
-                    <div class="data-item"><strong>Lower Band:</strong> <span id="lower-band">--</span></div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <h2>Strategy Position</h2>
-                <div id="position-status">No open position.</div>
-            </div>
-
-            <div class="panel">
-                <h2>Open Positions</h2>
-                <div id="open-positions-table"></div>
-            </div>
-
-            <div class="panel">
-                <h2>Holdings</h2>
-                <div id="holdings-table"></div>
-            </div>
-
-            <div class="panel">
-                <h2>Open Orders</h2>
-                <div id="open-orders-table"></div>
-            </div>
-
-            <div class="panel">
-                <h2>Event Log</h2>
-                <div id="log-panel"></div>
-            </div>
+    <div class="panel">
+        <h2>Market Status</h2>
+        <div class="data-grid">
+            <div class="data-item"><strong>Timestamp:</strong> <span id="timestamp">--</span></div>
+            <div class="data-item"><strong>Price:</strong> <span id="price">--</span></div>
+            <div class="data-item"><strong>VWAP:</strong> <span id="vwap">--</span></div>
+            <div class="data-item"><strong>Upper Band:</strong> <span id="upper-band">--</span></div>
+            <div class="data-item"><strong>Lower Band:</strong> <span id="lower-band">--</span></div>
         </div>
     </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const statusInterval = setInterval(updateStatus, 2500);
+    <div class="panel">
+        <h2>Strategy Position</h2>
+        <div id="position-status">No open position.</div>
+    </div>
 
-            btnPause.addEventListener('click', () => fetch('/pause', { method: 'POST' }).then(updateStatus));
-            btnResume.addEventListener('click', () => fetch('/resume', { method: 'POST' }).then(updateStatus));
+    <div class="panel">
+        <h2>Event Log</h2>
+        <div id="log-panel"></div>
+    </div>
+{% endblock %}
 
-            function updateStatus() {
-                fetch('/status')
-                    .then(response => response.json())
-                    .then(data => {
-                        updateStrategyUI(data.strategy_state);
-                        updateAccountUI(data.account);
-                    })
-                    .catch(error => console.error('Error fetching status:', error));
-            }
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const statusInterval = setInterval(updateStatus, 1500);
 
-            function updateStrategyUI(state) {
-                if (!state || !state.latest_tick) return;
-                document.getElementById('timestamp').textContent = state.latest_tick.timestamp;
-                document.getElementById('price').textContent = state.latest_tick.close;
-                document.getElementById('vwap').textContent = state.latest_tick.VWAP;
-                document.getElementById('upper-band').textContent = state.latest_tick.UpperBand;
-                document.getElementById('lower-band').textContent = state.latest_tick.LowerBand;
+        const btnPause = document.getElementById('btn-pause');
+        const btnResume = document.getElementById('btn-resume');
 
-                const posStatusDiv = document.getElementById('position-status');
-                if (state.position) {
-                    posStatusDiv.innerHTML = `<strong>Direction:</strong> ${state.position.direction} | <strong>Entry:</strong> ${state.position.entry_price} | <strong>P&L:</strong> ${state.live_pnl}`;
-                } else {
-                    posStatusDiv.textContent = 'No open position.';
-                }
-
-                const logPanel = document.getElementById('log-panel');
-                logPanel.innerHTML = '';
-                if (state.log && state.log.length > 0) {
-                    state.log.forEach(msg => {
-                        const p = document.createElement('p');
-                        p.textContent = msg;
-                        logPanel.appendChild(p);
-                    });
-                    logPanel.scrollTop = logPanel.scrollHeight;
-                }
-            }
-
-            function updateAccountUI(account) {
-                if (!account) return;
-                document.getElementById('funds').textContent = account.funds !== undefined ? `₹${Number(account.funds).toLocaleString()}` : '--';
-                document.getElementById('pnl').textContent = account.pnl !== undefined ? `₹${Number(account.pnl).toLocaleString()}` : '--';
-
-                createTable('open-positions-table', ['Symbol', 'Qty', 'P&L'], account.positions, item => [item.tradingsymbol, item.quantity, `₹${item.pnl.toFixed(2)}`]);
-                createTable('holdings-table', ['Symbol', 'Qty', 'Avg. Price'], account.holdings, item => [item.tradingsymbol, item.quantity, `₹${item.average_price.toFixed(2)}`]);
-                createTable('open-orders-table', ['Symbol', 'Type', 'Qty', 'Price'], account.orders, item => [item.tradingsymbol, item.transaction_type, item.quantity, `₹${item.price}`]);
-            }
-
-            function createTable(containerId, headers, data, rowMapper) {
-                const container = document.getElementById(containerId);
-                container.innerHTML = '';
-                if (!data || data.length === 0) {
-                    container.textContent = `No ${containerId.split('-')[0]} found.`;
-                    return;
-                }
-
-                const table = document.createElement('table');
-                const thead = table.createTHead();
-                const tbody = table.createTBody();
-                let row = thead.insertRow();
-                headers.forEach(headerText => {
-                    let th = document.createElement('th');
-                    th.textContent = headerText;
-                    row.appendChild(th);
-                });
-
-                data.forEach(item => {
-                    row = tbody.insertRow();
-                    rowMapper(item).forEach(cellData => {
-                        let cell = row.insertCell();
-                        cell.textContent = cellData;
-                    });
-                });
-                container.appendChild(table);
-            }
-
-            updateStatus();
+        btnPause.addEventListener('click', function() {
+            fetch('/pause', { method: 'POST' })
+                .then(() => updateStatus());
         });
-    </script>
-</body>
-</html>
+
+        btnResume.addEventListener('click', function() {
+            fetch('/resume', { method: 'POST' })
+                .then(() => updateStatus());
+        });
+
+        function updateStatus() {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    updateStrategyUI(data.strategy_state);
+                })
+                .catch(error => console.error('Error fetching status:', error));
+        }
+
+        function updateStrategyUI(state) {
+            if (!state || !state.latest_tick) return;
+
+            document.getElementById('timestamp').textContent = state.latest_tick.timestamp;
+            document.getElementById('price').textContent = state.latest_tick.close;
+            document.getElementById('vwap').textContent = state.latest_tick.VWAP;
+            document.getElementById('upper-band').textContent = state.latest_tick.UpperBand;
+            document.getElementById('lower-band').textContent = state.latest_tick.LowerBand;
+
+            const posStatusDiv = document.getElementById('position-status');
+            if (state.position) {
+                posStatusDiv.innerHTML = `<strong>Direction:</strong> ${state.position.direction} | <strong>Entry:</strong> ${state.position.entry_price} | <strong>P&L:</strong> ${state.live_pnl}`;
+            } else {
+                posStatusDiv.textContent = 'No open position.';
+            }
+
+            const logPanel = document.getElementById('log-panel');
+            logPanel.innerHTML = '';
+            if (state.log && state.log.length > 0) {
+                state.log.forEach(msg => {
+                    const p = document.createElement('p');
+                    p.textContent = msg;
+                    logPanel.appendChild(p);
+                });
+                logPanel.scrollTop = logPanel.scrollHeight;
+            }
+        }
+
+        updateStatus();
+    });
+</script>
+{% endblock %}
