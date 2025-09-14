@@ -25,6 +25,10 @@
         .data-item strong { color: #555; display: block; margin-bottom: 5px; }
         .data-item span { font-weight: bold; font-size: 1.1em; }
         #position-status { font-size: 1.1em; text-align: center; padding: 20px; background: #f4f6f9; border-radius: 5px;}
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
+        th { background-color: #007bff; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
     </style>
 </head>
 <body>
@@ -39,6 +43,14 @@
             </div>
 
             <div class="panel">
+                <h2>Account Summary</h2>
+                <div class="data-grid">
+                    <div class="data-item"><strong>Available Funds:</strong> <span id="funds">--</span></div>
+                    <div class="data-item"><strong>Today's P&L:</strong> <span id="pnl">--</span></div>
+                </div>
+            </div>
+
+            <div class="panel">
                 <h2>Market Status</h2>
                 <div class="data-grid">
                     <div class="data-item"><strong>Timestamp:</strong> <span id="timestamp">--</span></div>
@@ -50,73 +62,114 @@
             </div>
 
             <div class="panel">
-                <h2>Position Status</h2>
+                <h2>Strategy Position</h2>
                 <div id="position-status">No open position.</div>
             </div>
 
             <div class="panel">
+                <h2>Open Positions</h2>
+                <div id="open-positions-table"></div>
+            </div>
+
+            <div class="panel">
+                <h2>Holdings</h2>
+                <div id="holdings-table"></div>
+            </div>
+
+            <div class="panel">
+                <h2>Open Orders</h2>
+                <div id="open-orders-table"></div>
+            </div>
+
+            <div class="panel">
                 <h2>Event Log</h2>
-                <div id="log-panel">
-                    <!-- Log messages will be inserted here by JavaScript -->
-                </div>
+                <div id="log-panel"></div>
             </div>
         </div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const statusInterval = setInterval(updateStatus, 1500); // Update every 1.5 seconds
+            const statusInterval = setInterval(updateStatus, 2500);
 
-            const btnPause = document.getElementById('btn-pause');
-            const btnResume = document.getElementById('btn-resume');
-
-            btnPause.addEventListener('click', function() {
-                fetch('/pause', { method: 'POST' })
-                    .then(() => updateStatus()); // Immediately update UI to show "Paused" log
-            });
-
-            btnResume.addEventListener('click', function() {
-                fetch('/resume', { method: 'POST' })
-                    .then(() => updateStatus()); // Immediately update UI to show "Resumed" log
-            });
+            btnPause.addEventListener('click', () => fetch('/pause', { method: 'POST' }).then(updateStatus));
+            btnResume.addEventListener('click', () => fetch('/resume', { method: 'POST' }).then(updateStatus));
 
             function updateStatus() {
                 fetch('/status')
                     .then(response => response.json())
                     .then(data => {
-                        if (!data || !data.latest_tick) return;
-
-                        // Update Market Status
-                        document.getElementById('timestamp').textContent = data.latest_tick.timestamp;
-                        document.getElementById('price').textContent = data.latest_tick.close;
-                        document.getElementById('vwap').textContent = data.latest_tick.VWAP;
-                        document.getElementById('upper-band').textContent = data.latest_tick.UpperBand;
-                        document.getElementById('lower-band').textContent = data.latest_tick.LowerBand;
-
-                        // Update Position Status
-                        const posStatusDiv = document.getElementById('position-status');
-                        if (data.position) {
-                            posStatusDiv.innerHTML = `<strong>Direction:</strong> ${data.position.direction} | <strong>Entry:</strong> ${data.position.entry_price} | <strong>P&L:</strong> ${data.live_pnl}`;
-                        } else {
-                            posStatusDiv.textContent = 'No open position.';
-                        }
-
-                        // Update Event Log
-                        const logPanel = document.getElementById('log-panel');
-                        logPanel.innerHTML = ''; // Clear old logs
-                        if (data.log && data.log.length > 0) {
-                            data.log.forEach(msg => {
-                                const p = document.createElement('p');
-                                p.textContent = msg;
-                                logPanel.appendChild(p);
-                            });
-                            logPanel.scrollTop = logPanel.scrollHeight; // Auto-scroll to bottom
-                        }
+                        updateStrategyUI(data.strategy_state);
+                        updateAccountUI(data.account);
                     })
                     .catch(error => console.error('Error fetching status:', error));
             }
 
-            // Initial call to populate UI immediately
+            function updateStrategyUI(state) {
+                if (!state || !state.latest_tick) return;
+                document.getElementById('timestamp').textContent = state.latest_tick.timestamp;
+                document.getElementById('price').textContent = state.latest_tick.close;
+                document.getElementById('vwap').textContent = state.latest_tick.VWAP;
+                document.getElementById('upper-band').textContent = state.latest_tick.UpperBand;
+                document.getElementById('lower-band').textContent = state.latest_tick.LowerBand;
+
+                const posStatusDiv = document.getElementById('position-status');
+                if (state.position) {
+                    posStatusDiv.innerHTML = `<strong>Direction:</strong> ${state.position.direction} | <strong>Entry:</strong> ${state.position.entry_price} | <strong>P&L:</strong> ${state.live_pnl}`;
+                } else {
+                    posStatusDiv.textContent = 'No open position.';
+                }
+
+                const logPanel = document.getElementById('log-panel');
+                logPanel.innerHTML = '';
+                if (state.log && state.log.length > 0) {
+                    state.log.forEach(msg => {
+                        const p = document.createElement('p');
+                        p.textContent = msg;
+                        logPanel.appendChild(p);
+                    });
+                    logPanel.scrollTop = logPanel.scrollHeight;
+                }
+            }
+
+            function updateAccountUI(account) {
+                if (!account) return;
+                document.getElementById('funds').textContent = account.funds !== undefined ? `₹${Number(account.funds).toLocaleString()}` : '--';
+                document.getElementById('pnl').textContent = account.pnl !== undefined ? `₹${Number(account.pnl).toLocaleString()}` : '--';
+
+                createTable('open-positions-table', ['Symbol', 'Qty', 'P&L'], account.positions, item => [item.tradingsymbol, item.quantity, `₹${item.pnl.toFixed(2)}`]);
+                createTable('holdings-table', ['Symbol', 'Qty', 'Avg. Price'], account.holdings, item => [item.tradingsymbol, item.quantity, `₹${item.average_price.toFixed(2)}`]);
+                createTable('open-orders-table', ['Symbol', 'Type', 'Qty', 'Price'], account.orders, item => [item.tradingsymbol, item.transaction_type, item.quantity, `₹${item.price}`]);
+            }
+
+            function createTable(containerId, headers, data, rowMapper) {
+                const container = document.getElementById(containerId);
+                container.innerHTML = '';
+                if (!data || data.length === 0) {
+                    container.textContent = `No ${containerId.split('-')[0]} found.`;
+                    return;
+                }
+
+                const table = document.createElement('table');
+                const thead = table.createTHead();
+                const tbody = table.createTBody();
+                let row = thead.insertRow();
+                headers.forEach(headerText => {
+                    let th = document.createElement('th');
+                    th.textContent = headerText;
+                    row.appendChild(th);
+                });
+
+                data.forEach(item => {
+                    row = tbody.insertRow();
+                    rowMapper(item).forEach(cellData => {
+                        let cell = row.insertCell();
+                        cell.textContent = cellData;
+                    });
+                });
+                container.appendChild(table);
+            }
+
             updateStatus();
         });
     </script>
