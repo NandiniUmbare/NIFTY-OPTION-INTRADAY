@@ -1,5 +1,12 @@
 from datetime import time
 
+# --- Broker Credentials ---
+# IMPORTANT: For security, do not hardcode your credentials here.
+# Use environment variables or a secure vault to store these.
+API_KEY = "YOUR_API_KEY"
+API_SECRET = "YOUR_API_SECRET"
+
+
 # --- Strategy Parameters ---
 STOP_LOSS = -1500  # As a negative value
 TAKE_PROFIT = 3000
