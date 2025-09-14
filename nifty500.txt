@@ -1,3 +1,5 @@
+# IMPORTANT NOTE: This is a sample list of Nifty 50 stocks, not the full Nifty 500 list.
+# Please replace this with the full list of Nifty 500 stock symbols for the strategy to work as intended.
 RELIANCE
 TCS
 HDFCBANK

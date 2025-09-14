@@ -144,3 +144,42 @@ class Broker:
         except Exception as e:
             print(f"BROKER: Error fetching quotes: {e}")
             return None
+
+    def get_instrument_token(self, symbol, exchange='NSE'):
+        """Fetches instrument token for a given symbol."""
+        if not self.kite: return None
+        try:
+            instruments = self.kite.instruments(exchange)
+            for instrument in instruments:
+                if instrument['tradingsymbol'] == symbol:
+                    return instrument['instrument_token']
+        except Exception as e:
+            print(f"BROKER: Error fetching instrument token for {symbol}: {e}")
+            return None
+        return None
+
+    def get_historical_data(self, instrument_token, from_date, to_date, interval):
+        """Fetches historical data for a given instrument token."""
+        if not self.kite: return None
+        try:
+            return self.kite.historical_data(instrument_token, from_date, to_date, interval)
+        except Exception as e:
+            print(f"BROKER: Error fetching historical data: {e}")
+            return None
+
+    def place_order(self, symbol, quantity, direction, order_type='MARKET', exchange='NSE', product='MIS'):
+        """Places a generic order."""
+        if not self.kite: return None
+        try:
+            return self.kite.place_order(
+                tradingsymbol=symbol,
+                exchange=exchange,
+                transaction_type=direction,
+                quantity=quantity,
+                order_type=order_type,
+                product=product,
+                variety=self.kite.VARIETY_REGULAR
+            )
+        except Exception as e:
+            print(f"BROKER: Error placing order: {e}")
+            return None
