@@ -3,8 +3,10 @@ from functools import wraps
 import threading
 import time
 import pandas as pd
+import schedule
 import data_handler
 import strategy
+from strategy2 import Strategy2
 from broker_connection import Broker
 
 # --- Global State Management ---
@@ -13,6 +15,7 @@ app_state = {
     "latest_strategy_state": None,
     "broker": Broker(),
     "strategy_processor": None, # Will be created after successful login
+    "strategy2_selected_stocks": [],
 }
 state_lock = threading.Lock()
 app = Flask(__name__)
@@ -68,6 +71,46 @@ def strategy_page():
 @login_required
 def backtesting_page():
     return render_template('backtesting.html')
+
+def run_strategy2_scheduler():
+    """
+    This function runs in a background thread and schedules the stock selection
+    for Strategy 2 to run once a day.
+    """
+    def select_stocks_job():
+        print("Scheduler: Running daily stock selection for Strategy 2...")
+        with state_lock:
+            broker = app_state['broker']
+            # The job should only run if the user is logged in
+            if not broker or not broker.access_token:
+                print("Scheduler: User not logged in. Skipping stock selection.")
+                return
+
+        strategy2 = Strategy2(broker)
+        selected_stocks = strategy2.select_stocks_for_the_day()
+
+        with state_lock:
+            app_state['strategy2_selected_stocks'] = selected_stocks
+
+        print(f"Scheduler: Selected stocks for today: {[s['tradingsymbol'] for s in selected_stocks]}")
+
+    # Schedule the job to run every day at 09:30.
+    # Note: This uses the server's local time.
+    schedule.every().day.at("09:30").do(select_stocks_job)
+
+    # For testing, you can run it more frequently, e.g., every minute:
+    # schedule.every(1).minutes.do(select_stocks_job)
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+@app.route('/strategy2')
+@login_required
+def strategy2_page():
+    with state_lock:
+        selected_stocks = app_state.get('strategy2_selected_stocks', [])
+    return render_template('strategy2.html', selected_stocks=selected_stocks)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -195,6 +238,12 @@ def format_state_for_json(state):
     }
 
 if __name__ == '__main__':
+    # Start the simulation thread for the first strategy
     simulation_thread = threading.Thread(target=run_simulation_thread, daemon=True)
     simulation_thread.start()
+
+    # Start the scheduler thread for Strategy 2
+    strategy2_scheduler_thread = threading.Thread(target=run_strategy2_scheduler, daemon=True)
+    strategy2_scheduler_thread.start()
+
     app.run(debug=False, host='0.0.0.0', port=8080)
