@@ -1,47 +1,52 @@
+from kiteconnect import KiteConnect
 import config
-# from kiteconnect import KiteConnect, KiteTicker
 
 class Broker:
     def __init__(self):
         """
-        Initializes the Broker class, which handles all interactions with the Kite API.
+        Initializes the Broker class. The KiteConnect object is not created
+        until the API key is provided by the user.
         """
-        # The KiteConnect object would be initialized here.
-        # You would typically pass the api_key from the config.
-        # self.kite = KiteConnect(api_key=config.API_KEY)
-
+        self.kite = None
+        self.api_key = None
+        self.api_secret = None
         self.access_token = None
-        self.kite = None # Will hold the KiteConnect instance after login
+        print("Broker module initialized. Waiting for API credentials.")
 
-        print("Broker module initialized. Waiting for login.")
+    def set_credentials(self, api_key, api_secret):
+        """
+        Sets the API key and secret, and initializes the KiteConnect client.
+        """
+        self.api_key = api_key
+        self.api_secret = api_secret
+        self.kite = KiteConnect(api_key=self.api_key)
+        print("BROKER: API credentials set and KiteConnect client initialized.")
 
     def get_login_url(self):
         """
         Generates the login URL for the user to authenticate with Kite.
-        In a real app, this would call self.kite.login_url().
         """
-        print("BROKER: In a real app, this would generate and return a Kite login URL.")
-        # For simulation, we can just pretend the login was successful and redirect back.
-        return "http://127.0.0.1:8080/connect/kite?request_token=SIMULATED"
+        if not self.kite:
+            print("BROKER: Error - API key not set yet.")
+            return None
+        return self.kite.login_url()
 
     def set_access_token(self, request_token):
         """
-        Generates an access token using the request token obtained after a successful login.
+        Generates an access token using the request token and the stored API secret.
         """
-        # In a real app, you would uncomment and use this logic:
-        # try:
-        #     user_data = self.kite.generate_session(request_token, api_secret=config.API_SECRET)
-        #     self.access_token = user_data["access_token"]
-        #     self.kite.set_access_token(self.access_token)
-        #     print("BROKER: Access token generated successfully.")
-        #     return True
-        # except Exception as e:
-        #     print(f"BROKER: Error generating access token: {e}")
-        #     return False
-
-        print(f"BROKER: Received request_token '{request_token}'. Simulating successful token exchange.")
-        self.access_token = "SIMULATED_ACCESS_TOKEN"
-        return True
+        if not self.kite or not self.api_secret:
+            print("BROKER: Error - API key/secret not set.")
+            return False
+        try:
+            user_data = self.kite.generate_session(request_token, api_secret=self.api_secret)
+            self.access_token = user_data["access_token"]
+            self.kite.set_access_token(self.access_token)
+            print("BROKER: Access token generated successfully.")
+            return True
+        except Exception as e:
+            print(f"BROKER: Error generating access token: {e}")
+            return False
 
     def start_websocket(self, on_ticks_callback):
         """

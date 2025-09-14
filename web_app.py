@@ -48,18 +48,34 @@ def run_simulation_thread():
 def index():
     # If the strategy processor hasn't been created, the user is not "logged in"
     if app_state.get('strategy_processor') is None:
-        return 'Not logged in. Please <a href="/login">login</a> to start the terminal.'
+        return 'Not logged in. Please <a href="/login">login with your API credentials</a> to start the terminal.'
     return render_template('index.html')
 
-@app.route('/login')
+@app.route('/login', methods=['GET', 'POST'])
 def login():
     """
-    Redirects the user to the broker's login page.
+    Handles the login process.
+    GET: Displays the login page.
+    POST: Receives API credentials, stores them, and redirects to Kite for authentication.
     """
-    with state_lock:
-        broker = app_state['broker']
-    login_url = broker.get_login_url()
-    return redirect(login_url)
+    if request.method == 'POST':
+        api_key = request.form.get('api_key')
+        api_secret = request.form.get('api_secret')
+        if not api_key or not api_secret:
+            return render_template('login.html', error="API Key and Secret are required.")
+
+        with state_lock:
+            broker = app_state['broker']
+            broker.set_credentials(api_key, api_secret)
+            login_url = broker.get_login_url()
+
+        if login_url:
+            print(f"Redirecting to Kite login: {login_url}")
+            return redirect(login_url)
+        else:
+            return render_template('login.html', error="Could not generate login URL.")
+
+    return render_template('login.html', error=request.args.get('error'))
 
 @app.route('/connect/kite')
 def kite_callback():
@@ -69,18 +85,17 @@ def kite_callback():
     """
     request_token = request.args.get("request_token")
     if not request_token:
-        return "Error: No request_token found.", 400
+        return redirect('/login?error=Failed to get request_token from Kite.')
 
     with state_lock:
         broker = app_state['broker']
         if broker.set_access_token(request_token):
-            # Login successful, now create the strategy processor with the broker instance
             app_state['strategy_processor'] = strategy.StrategyProcessor(broker)
             app_state['strategy_processor'].log.append("Broker connection successful.")
             print("Login successful, redirecting to terminal.")
             return redirect('/')
         else:
-            return "Failed to generate access token.", 400
+            return redirect('/login?error=Failed to generate access token. Check credentials.')
 
 @app.route('/status')
 def status():
