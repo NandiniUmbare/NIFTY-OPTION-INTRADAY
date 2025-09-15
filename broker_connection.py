@@ -1,185 +1,85 @@
-from kiteconnect import KiteConnect
 import config
+import threading
+import time
+import pandas as pd
+import numpy as np
+# from kiteconnect import KiteConnect, KiteTicker
 
 class Broker:
-    def __init__(self):
-        """
-        Initializes the Broker class. The KiteConnect object is not created
-        until the API key is provided by the user.
-        """
+    def __init__(self, app_state, state_lock):
+        self.app_state = app_state
+        self.state_lock = state_lock
         self.kite = None
-        self.api_key = None
-        self.api_secret = None
-        self.access_token = None
-        print("Broker module initialized. Waiting for API credentials.")
-
-    def set_credentials(self, api_key, api_secret):
-        """
-        Sets the API key and secret, and initializes the KiteConnect client.
-        """
-        self.api_key = api_key
-        self.api_secret = api_secret
-        self.kite = KiteConnect(api_key=self.api_key)
-        print("BROKER: API credentials set and KiteConnect client initialized.")
+        self.kws = None
+        self.strategy_processor = None
+        print("Broker module initialized. Waiting for login.")
 
     def get_login_url(self):
-        """
-        Generates the login URL for the user to authenticate with Kite.
-        """
-        if not self.kite:
-            print("BROKER: Error - API key not set yet.")
-            return None
-        return self.kite.login_url()
+        print("BROKER: In a real app, this would generate and return a Kite login URL.")
+        return "http://127.0.0.1:8080/connect/kite?request_token=SIMULATED"
 
     def set_access_token(self, request_token):
-        """
-        Generates an access token using the request token and the stored API secret.
-        """
-        if not self.kite or not self.api_secret:
-            print("BROKER: Error - API key/secret not set.")
-            return False
-        try:
-            user_data = self.kite.generate_session(request_token, api_secret=self.api_secret)
-            self.access_token = user_data["access_token"]
-            self.kite.set_access_token(self.access_token)
-            print("BROKER: Access token generated successfully.")
-            return True
-        except Exception as e:
-            print(f"BROKER: Error generating access token: {e}")
-            return False
+        print(f"BROKER: Received request_token '{request_token}'. Simulating successful token exchange.")
+        return True
 
-    def start_websocket(self, on_ticks_callback):
+    def set_strategy_processor(self, processor):
+        self.strategy_processor = processor
+
+    def start_data_feed(self):
         """
-        Starts the KiteTicker websocket to receive live data.
+        This method should be called after a successful login to start the
+        live data websocket.
         """
         # In a real app, you would uncomment and use this logic:
-        # kws = KiteTicker(config.API_KEY, self.access_token)
-        # kws.on_ticks = on_ticks_callback
-        # kws.on_connect = self.on_websocket_connect
-        # kws.connect(threaded=True)
-        print("BROKER: In a real app, this would start the KiteTicker websocket.")
-        # In our simulation, the data feed is handled by a separate thread in web_app.py
+        # self.kws = KiteTicker(config.API_KEY, self.kite.access_token)
+        # self.kws.on_ticks = self._on_ticks
+        # self.kws.on_connect = self._on_connect
+        # self.kws.connect(threaded=True)
+        print("BROKER: Placeholder for starting live data feed. User needs to implement this.")
         pass
 
-    def on_websocket_connect(self, ws, response):
-        """
-        A callback function for when the websocket connects.
-        """
+    def _on_connect(self, ws, response):
+        """ Callback for when the websocket connects. """
         print("BROKER: Websocket connected. Subscribing to instruments...")
-        # Here you would subscribe to the instrument tokens you want to track.
-        # Example: NIFTY 50 index token is 256265. You'd need the token for the future.
-        # tokens_to_subscribe = [256265]
+        # tokens_to_subscribe = [INSTUMENT_TOKEN_FOR_FUTURE]
         # ws.subscribe(tokens_to_subscribe)
         # ws.set_mode(ws.MODE_FULL, tokens_to_subscribe)
         pass
 
+    def _on_ticks(self, ws, ticks):
+        """
+        Callback for when new ticks arrive from the websocket.
+        This is the entry point for all live data to be processed by the strategy.
+        """
+        with self.state_lock:
+            if self.app_state["is_paused"]:
+                return
+            if not self.strategy_processor:
+                return
+
+            latest_tick_data = ticks[0]
+
+            # This is a critical step: Convert the live tick from the broker
+            # into the pandas.Series format that the strategy processor expects.
+            tick_series = pd.Series({
+                'close': latest_tick_data.get('last_price'),
+                'high': latest_tick_data.get('last_price'), # Note: OHLC might need separate handling
+                'low': latest_tick_data.get('last_price'),
+                'open': latest_tick_data.get('last_price'),
+                'volume': latest_tick_data.get('volume_traded')
+            }, name=pd.to_datetime(latest_tick_data.get('timestamp')))
+
+            # Process the tick and update the application's shared state
+            self.app_state["latest_strategy_state"] = self.strategy_processor.process_tick(tick_series)
+
     def place_spread_order(self, base_strike, direction):
-        """
-        Places the two legs of a credit spread order.
-        """
         print(f"BROKER: Received request to place {direction} spread at strike {base_strike}.")
-        # Here you would add the logic from the previous conceptual example,
-        # using self.kite.place_order for both legs of the spread.
-        # You need to construct the correct tradingsymbol for Nifty options.
-
-        # For simulation, we just return a dummy success response.
+        # Real self.kite.place_order() logic goes here
         print("BROKER: Simulating successful order placement.")
-        return {'status': 'success', 'order_id_1': 'sim_123', 'order_id_2': 'sim_456'}
-
-    def close_spread_order(self, open_position):
-        """
-        Places opposite orders to close an existing spread.
-        """
-        print(f"BROKER: Received request to close position with ID {open_position.get('order_id')}.")
-        # Here you would place opposite orders to the ones in the open_position dictionary.
-
-        # For simulation, we just return a dummy success response.
-        print("BROKER: Simulating successful position close.")
         return {'status': 'success'}
 
-    def get_margins(self):
-        """Fetches margin details."""
-        if not self.kite: return None
-        try:
-            return self.kite.margins()
-        except Exception as e:
-            print(f"BROKER: Error fetching margins: {e}")
-            return None
-
-    def get_positions(self):
-        """Fetches current positions."""
-        if not self.kite: return None
-        try:
-            return self.kite.positions()
-        except Exception as e:
-            print(f"BROKER: Error fetching positions: {e}")
-            return None
-
-    def get_holdings(self):
-        """Fetches holdings."""
-        if not self.kite: return None
-        try:
-            return self.kite.holdings()
-        except Exception as e:
-            print(f"BROKER: Error fetching holdings: {e}")
-            return None
-
-    def get_orders(self):
-        """Fetches all orders for the day."""
-        if not self.kite: return None
-        try:
-            return self.kite.orders()
-        except Exception as e:
-            print(f"BROKER: Error fetching orders: {e}")
-            return None
-
-    def get_quotes(self, symbols):
-        """Fetches quotes for a list of symbols."""
-        if not self.kite: return None
-        try:
-            # The quote method in kiteconnect expects symbols in the format 'EXCHANGE:TRADINGSYMBOL'
-            # Assuming NSE for all symbols for now.
-            instruments = [f"NSE:{symbol}" for symbol in symbols]
-            return self.kite.quote(instruments)
-        except Exception as e:
-            print(f"BROKER: Error fetching quotes: {e}")
-            return None
-
-    def get_instrument_token(self, symbol, exchange='NSE'):
-        """Fetches instrument token for a given symbol."""
-        if not self.kite: return None
-        try:
-            instruments = self.kite.instruments(exchange)
-            for instrument in instruments:
-                if instrument['tradingsymbol'] == symbol:
-                    return instrument['instrument_token']
-        except Exception as e:
-            print(f"BROKER: Error fetching instrument token for {symbol}: {e}")
-            return None
-        return None
-
-    def get_historical_data(self, instrument_token, from_date, to_date, interval):
-        """Fetches historical data for a given instrument token."""
-        if not self.kite: return None
-        try:
-            return self.kite.historical_data(instrument_token, from_date, to_date, interval)
-        except Exception as e:
-            print(f"BROKER: Error fetching historical data: {e}")
-            return None
-
-    def place_order(self, symbol, quantity, direction, order_type='MARKET', exchange='NSE', product='MIS'):
-        """Places a generic order."""
-        if not self.kite: return None
-        try:
-            return self.kite.place_order(
-                tradingsymbol=symbol,
-                exchange=exchange,
-                transaction_type=direction,
-                quantity=quantity,
-                order_type=order_type,
-                product=product,
-                variety=self.kite.VARIETY_REGULAR
-            )
-        except Exception as e:
-            print(f"BROKER: Error placing order: {e}")
-            return None
+    def close_spread_order(self, open_position):
+        print(f"BROKER: Received request to close position.")
+        # Real self.kite.place_order() logic for closing goes here
+        print("BROKER: Simulating successful position close.")
+        return {'status': 'success'}

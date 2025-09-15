@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Terminal</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f4f6f9; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); overflow: hidden; }
+        header { background-color: #007bff; color: white; padding: 20px; text-align: center; }
+        h1, h2 { margin: 0; }
+        h2 { color: #007bff; border-bottom: 2px solid #f4f6f9; padding-bottom: 10px; margin-bottom: 15px; font-size: 1.2em;}
+        .content { padding: 20px; }
+        .panel { margin-bottom: 20px; }
+        .controls { text-align: center; padding-bottom: 20px; }
+        button { padding: 10px 25px; font-size: 1em; cursor: pointer; border: none; border-radius: 5px; margin: 0 10px; transition: background-color 0.3s; }
+        #btn-pause { background-color: #ffc107; color: #333; }
+        #btn-pause:hover { background-color: #e0a800; }
+        #btn-resume { background-color: #28a745; color: white; }
+        #btn-resume:hover { background-color: #218838; }
+        #log-panel { background-color: #212529; color: #f8f9fa; padding: 15px; height: 160px; overflow-y: auto; font-family: "Courier New", Courier, monospace; font-size: 0.9em; border-radius: 5px; }
+        #log-panel p { margin: 0; padding: 2px 0; border-bottom: 1px solid #495057; }
+        .data-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .data-item { background: #f4f6f9; padding: 15px; border-radius: 5px; }
+        .data-item strong { color: #555; display: block; margin-bottom: 5px; }
+        .data-item span { font-weight: bold; font-size: 1.1em; }
+        #position-status { font-size: 1.1em; text-align: center; padding: 20px; background: #f4f6f9; border-radius: 5px;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Nifty VWAP Strategy Terminal</h1>
+        </header>
+        <div class="content">
+            <div class="panel controls">
+                <button id="btn-resume">Resume</button>
+                <button id="btn-pause">Pause</button>
+            </div>
+
+            <div class="panel">
+                <h2>Market Status</h2>
+                <div class="data-grid">
+                    <div class="data-item"><strong>Timestamp:</strong> <span id="timestamp">--</span></div>
+                    <div class="data-item"><strong>Price:</strong> <span id="price">--</span></div>
+                    <div class="data-item"><strong>VWAP:</strong> <span id="vwap">--</span></div>
+                    <div class="data-item"><strong>Upper Band:</strong> <span id="upper-band">--</span></div>
+                    <div class="data-item"><strong>Lower Band:</strong> <span id="lower-band">--</span></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Position Status</h2>
+                <div id="position-status">No open position.</div>
+            </div>
+
+            <div class="panel">
+                <h2>Event Log</h2>
+                <div id="log-panel">
+                    <!-- Log messages will be inserted here by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const statusInterval = setInterval(updateStatus, 1500); // Update every 1.5 seconds
+
+            const btnPause = document.getElementById('btn-pause');
+            const btnResume = document.getElementById('btn-resume');
+
+            btnPause.addEventListener('click', function() {
+                fetch('/pause', { method: 'POST' })
+                    .then(() => updateStatus()); // Immediately update UI to show "Paused" log
+            });
+
+            btnResume.addEventListener('click', function() {
+                fetch('/resume', { method: 'POST' })
+                    .then(() => updateStatus()); // Immediately update UI to show "Resumed" log
+            });
+
+            function updateStatus() {
+                fetch('/status')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (!data || !data.latest_tick) return;
+
+                        // Update Market Status
+                        document.getElementById('timestamp').textContent = data.latest_tick.timestamp;
+                        document.getElementById('price').textContent = data.latest_tick.close;
+                        document.getElementById('vwap').textContent = data.latest_tick.VWAP;
+                        document.getElementById('upper-band').textContent = data.latest_tick.UpperBand;
+                        document.getElementById('lower-band').textContent = data.latest_tick.LowerBand;
+
+                        // Update Position Status
+                        const posStatusDiv = document.getElementById('position-status');
+                        if (data.position) {
+                            posStatusDiv.innerHTML = `<strong>Direction:</strong> ${data.position.direction} | <strong>Entry:</strong> ${data.position.entry_price} | <strong>P&L:</strong> ${data.live_pnl}`;
+                        } else {
+                            posStatusDiv.textContent = 'No open position.';
+                        }
+
+                        // Update Event Log
+                        const logPanel = document.getElementById('log-panel');
+                        logPanel.innerHTML = ''; // Clear old logs
+                        if (data.log && data.log.length > 0) {
+                            data.log.forEach(msg => {
+                                const p = document.createElement('p');
+                                p.textContent = msg;
+                                logPanel.appendChild(p);
+                            });
+                            logPanel.scrollTop = logPanel.scrollHeight; // Auto-scroll to bottom
+                        }
+                    })
+                    .catch(error => console.error('Error fetching status:', error));
+            }
+
+            // Initial call to populate UI immediately
+            updateStatus();
+        });
+    </script>
+</body>
+</html>
