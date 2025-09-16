@@ -122,7 +122,7 @@ def login_kite():
 @app.route('/connect/aliceblue')
 def aliceblue_callback():
     # Step 2 of Alice Blue login: Handle the callback from their site
-    auth_code = request.args.get("auth_code")
+    auth_code = request.args.get("authCode")
     if not auth_code:
         return redirect('/login?error=AliceBlue_authentication_failed_no_auth_code')
 
