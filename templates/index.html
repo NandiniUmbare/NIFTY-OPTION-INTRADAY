@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Home Dashboard{% endblock %}
+
+{% block head %}
+<style>
+    .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+    .panel { background: #f9f9f9; padding: 15px; border-radius: 5px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
+    th { background-color: #007bff; color: white; }
+    .positive { color: green; }
+    .negative { color: red; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Home Dashboard</h1>
+<p>Welcome to your trading terminal. Here is a summary of your account.</p>
+
+<div class="grid-container">
+    <div class="panel">
+        <h2>Account Funds</h2>
+        <p id="funds">Loading...</p>
+    </div>
+</div>
+
+<div class="panel" style="margin-top: 20px;">
+    <h2>Open Positions</h2>
+    <div id="positions">
+        <p>Loading...</p>
+    </div>
+</div>
+
+<div class="panel" style="margin-top: 20px;">
+    <h2>Holdings</h2>
+    <div id="holdings">
+        <p>Loading...</p>
+    </div>
+</div>
+
+<div class="panel" style="margin-top: 20px;">
+    <h2>Pending Orders</h2>
+    <div id="orders">
+        <p>Loading...</p>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const statusInterval = setInterval(updateStatus, 5000); // Update every 5 seconds
+
+        function updateStatus() {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data || !data.account) return;
+                    const acc = data.account;
+
+                    // Update Funds
+                    document.getElementById('funds').textContent = `Available Cash: ${acc.funds || 'N/A'}`;
+
+                    // Update Positions
+                    const positionsDiv = document.getElementById('positions');
+                    if (acc.positions && acc.positions.length > 0) {
+                        let table = '<table><tr><th>Symbol</th><th>Qty</th><th>Avg Price</th><th>LTP</th><th>P&L</th></tr>';
+                        acc.positions.forEach(p => {
+                            const pnlClass = p.pnl > 0 ? 'positive' : 'negative';
+                            table += `<tr>
+                                <td>${p.tradingsymbol}</td>
+                                <td>${p.quantity}</td>
+                                <td>${p.average_price.toFixed(2)}</td>
+                                <td>${p.last_price.toFixed(2)}</td>
+                                <td class="${pnlClass}">${p.pnl.toFixed(2)}</td>
+                            </tr>`;
+                        });
+                        table += '</table>';
+                        positionsDiv.innerHTML = table;
+                    } else {
+                        positionsDiv.innerHTML = '<p>No open positions.</p>';
+                    }
+
+                    // Update Holdings
+                    const holdingsDiv = document.getElementById('holdings');
+                    if (acc.holdings && acc.holdings.length > 0) {
+                        let table = '<table><tr><th>Symbol</th><th>Qty</th><th>Avg Price</th><th>LTP</th></tr>';
+                        acc.holdings.forEach(h => {
+                            table += `<tr>
+                                <td>${h.tradingsymbol}</td>
+                                <td>${h.quantity}</td>
+                                <td>${h.average_price.toFixed(2)}</td>
+                                <td>${h.last_price.toFixed(2)}</td>
+                            </tr>`;
+                        });
+                        table += '</table>';
+                        holdingsDiv.innerHTML = table;
+                    } else {
+                        holdingsDiv.innerHTML = '<p>No holdings.</p>';
+                    }
+
+                    // Update Orders
+                    const ordersDiv = document.getElementById('orders');
+                    if (acc.orders && acc.orders.length > 0) {
+                        let table = '<table><tr><th>Symbol</th><th>Type</th><th>Qty</th><th>Price</th><th>Status</th></tr>';
+                        acc.orders.forEach(o => {
+                            table += `<tr>
+                                <td>${o.tradingsymbol}</td>
+                                <td>${o.transaction_type}</td>
+                                <td>${o.quantity}</td>
+                                <td>${o.price.toFixed(2)}</td>
+                                <td>${o.status}</td>
+                            </tr>`;
+                        });
+                        table += '</table>';
+                        ordersDiv.innerHTML = table;
+                    } else {
+                        ordersDiv.innerHTML = '<p>No pending orders.</p>';
+                    }
+                })
+                .catch(error => console.error('Error fetching status:', error));
+        }
+        updateStatus(); // Initial call
+    });
+</script>
+{% endblock %}

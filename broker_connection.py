@@ -1,33 +1,41 @@
 from kiteconnect import KiteConnect
-import config
+import configparser
+import logging
 
 class Broker:
     def __init__(self):
         """
-        Initializes the Broker class. The KiteConnect object is not created
-        until the API key is provided by the user.
+        Initializes the Broker class, which handles the connection to the Kite API for order placement.
         """
         self.kite = None
         self.api_key = None
         self.api_secret = None
         self.access_token = None
-        print("Broker module initialized. Waiting for API credentials.")
+        self.instrument_list = None
+        self._load_credentials()
+        if self.api_key:
+            self.kite = KiteConnect(api_key=self.api_key)
 
-    def set_credentials(self, api_key, api_secret):
+    def _load_credentials(self):
         """
-        Sets the API key and secret, and initializes the KiteConnect client.
+        Loads Kite credentials from the config.ini file.
         """
-        self.api_key = api_key
-        self.api_secret = api_secret
-        self.kite = KiteConnect(api_key=self.api_key)
-        print("BROKER: API credentials set and KiteConnect client initialized.")
+        config = configparser.ConfigParser()
+        config.read('config.ini')
+        try:
+            self.api_key = config.get('KITE', 'api_key')
+            self.api_secret = config.get('KITE', 'api_secret')
+        except (configparser.NoSectionError, configparser.NoOptionError) as e:
+            logging.error(f"Credentials for Kite not found in config.ini: {e}")
+            self.api_key = None
+            self.api_secret = None
 
     def get_login_url(self):
         """
         Generates the login URL for the user to authenticate with Kite.
         """
         if not self.kite:
-            print("BROKER: Error - API key not set yet.")
+            logging.error("Cannot get login URL: Kite client not initialized. Check credentials.")
             return None
         return self.kite.login_url()
 
@@ -36,142 +44,54 @@ class Broker:
         Generates an access token using the request token and the stored API secret.
         """
         if not self.kite or not self.api_secret:
-            print("BROKER: Error - API key/secret not set.")
+            logging.error("Cannot set access token: Kite client or API secret not available.")
             return False
         try:
             user_data = self.kite.generate_session(request_token, api_secret=self.api_secret)
             self.access_token = user_data["access_token"]
             self.kite.set_access_token(self.access_token)
-            print("BROKER: Access token generated successfully.")
+            logging.info("Kite access token generated successfully.")
             return True
         except Exception as e:
-            print(f"BROKER: Error generating access token: {e}")
+            logging.error(f"Error generating Kite access token: {e}")
             return False
 
-    def start_websocket(self, on_ticks_callback):
+    def get_and_cache_instruments(self, exchange='NSE'):
         """
-        Starts the KiteTicker websocket to receive live data.
+        Fetches the complete list of instruments for an exchange and caches it.
         """
-        # In a real app, you would uncomment and use this logic:
-        # kws = KiteTicker(config.API_KEY, self.access_token)
-        # kws.on_ticks = on_ticks_callback
-        # kws.on_connect = self.on_websocket_connect
-        # kws.connect(threaded=True)
-        print("BROKER: In a real app, this would start the KiteTicker websocket.")
-        # In our simulation, the data feed is handled by a separate thread in web_app.py
-        pass
+        if not self.kite or not self.access_token:
+            logging.error("Cannot fetch instruments: Kite client not initialized or not logged in.")
+            return False
+        if self.instrument_list is None:
+            try:
+                self.instrument_list = self.kite.instruments(exchange)
+                logging.info(f"Successfully fetched and cached {len(self.instrument_list)} instruments for {exchange}.")
+            except Exception as e:
+                logging.error(f"Error fetching instruments from Kite: {e}")
+                return False
+        return True
 
-    def on_websocket_connect(self, ws, response):
+    def get_instrument_by_symbol(self, symbol, exchange='NSE'):
         """
-        A callback function for when the websocket connects.
+        Finds an instrument from the cached list by its trading symbol.
         """
-        print("BROKER: Websocket connected. Subscribing to instruments...")
-        # Here you would subscribe to the instrument tokens you want to track.
-        # Example: NIFTY 50 index token is 256265. You'd need the token for the future.
-        # tokens_to_subscribe = [256265]
-        # ws.subscribe(tokens_to_subscribe)
-        # ws.set_mode(ws.MODE_FULL, tokens_to_subscribe)
-        pass
+        if self.instrument_list is None:
+            if not self.get_and_cache_instruments(exchange):
+                return None
 
-    def place_spread_order(self, base_strike, direction):
-        """
-        Places the two legs of a credit spread order.
-        """
-        print(f"BROKER: Received request to place {direction} spread at strike {base_strike}.")
-        # Here you would add the logic from the previous conceptual example,
-        # using self.kite.place_order for both legs of the spread.
-        # You need to construct the correct tradingsymbol for Nifty options.
-
-        # For simulation, we just return a dummy success response.
-        print("BROKER: Simulating successful order placement.")
-        return {'status': 'success', 'order_id_1': 'sim_123', 'order_id_2': 'sim_456'}
-
-    def close_spread_order(self, open_position):
-        """
-        Places opposite orders to close an existing spread.
-        """
-        print(f"BROKER: Received request to close position with ID {open_position.get('order_id')}.")
-        # Here you would place opposite orders to the ones in the open_position dictionary.
-
-        # For simulation, we just return a dummy success response.
-        print("BROKER: Simulating successful position close.")
-        return {'status': 'success'}
-
-    def get_margins(self):
-        """Fetches margin details."""
-        if not self.kite: return None
-        try:
-            return self.kite.margins()
-        except Exception as e:
-            print(f"BROKER: Error fetching margins: {e}")
-            return None
-
-    def get_positions(self):
-        """Fetches current positions."""
-        if not self.kite: return None
-        try:
-            return self.kite.positions()
-        except Exception as e:
-            print(f"BROKER: Error fetching positions: {e}")
-            return None
-
-    def get_holdings(self):
-        """Fetches holdings."""
-        if not self.kite: return None
-        try:
-            return self.kite.holdings()
-        except Exception as e:
-            print(f"BROKER: Error fetching holdings: {e}")
-            return None
-
-    def get_orders(self):
-        """Fetches all orders for the day."""
-        if not self.kite: return None
-        try:
-            return self.kite.orders()
-        except Exception as e:
-            print(f"BROKER: Error fetching orders: {e}")
-            return None
-
-    def get_quotes(self, symbols):
-        """Fetches quotes for a list of symbols."""
-        if not self.kite: return None
-        try:
-            # The quote method in kiteconnect expects symbols in the format 'EXCHANGE:TRADINGSYMBOL'
-            # Assuming NSE for all symbols for now.
-            instruments = [f"NSE:{symbol}" for symbol in symbols]
-            return self.kite.quote(instruments)
-        except Exception as e:
-            print(f"BROKER: Error fetching quotes: {e}")
-            return None
-
-    def get_instrument_token(self, symbol, exchange='NSE'):
-        """Fetches instrument token for a given symbol."""
-        if not self.kite: return None
-        try:
-            instruments = self.kite.instruments(exchange)
-            for instrument in instruments:
-                if instrument['tradingsymbol'] == symbol:
-                    return instrument['instrument_token']
-        except Exception as e:
-            print(f"BROKER: Error fetching instrument token for {symbol}: {e}")
-            return None
+        for instrument in self.instrument_list:
+            if instrument['tradingsymbol'] == symbol:
+                return instrument
         return None
-
-    def get_historical_data(self, instrument_token, from_date, to_date, interval):
-        """Fetches historical data for a given instrument token."""
-        if not self.kite: return None
-        try:
-            return self.kite.historical_data(instrument_token, from_date, to_date, interval)
-        except Exception as e:
-            print(f"BROKER: Error fetching historical data: {e}")
-            return None
 
     def place_order(self, symbol, quantity, direction, order_type='MARKET', exchange='NSE', product='MIS'):
         """Places a generic order."""
-        if not self.kite: return None
+        if not self.kite or not self.access_token:
+            logging.error("Cannot place order: Not connected to Kite.")
+            return None
         try:
-            return self.kite.place_order(
+            order_id = self.kite.place_order(
                 tradingsymbol=symbol,
                 exchange=exchange,
                 transaction_type=direction,
@@ -180,6 +100,8 @@ class Broker:
                 product=product,
                 variety=self.kite.VARIETY_REGULAR
             )
+            logging.info(f"Placed order for {symbol}: {direction} {quantity} @ {order_type}. Order ID: {order_id}")
+            return order_id
         except Exception as e:
-            print(f"BROKER: Error placing order: {e}")
+            logging.error(f"Error placing order for {symbol}: {e}")
             return None

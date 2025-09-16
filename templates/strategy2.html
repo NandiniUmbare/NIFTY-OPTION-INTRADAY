@@ -1,94 +1,115 @@
 {% extends "base.html" %}
-{% block title %}Strategy 2 - Trading Terminal{% endblock %}
-{% block content %}
-<h2>Strategy 2</h2>
-<p>This page will display the status of Strategy 2.</p>
-<div class="panel">
-    <h3>Selected Stocks for Today</h3>
-    <div id="selected-stocks">
-        {% if selected_stocks %}
-            <ul>
-                {% for stock in selected_stocks %}
-                    <li>{{ stock.tradingsymbol }} - LTP: <span id="ltp-{{ stock.tradingsymbol }}">--</span></li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p>No stocks selected for trading today.</p>
-        {% endif %}
-    </div>
-</div>
-<div class="panel">
-    <h3>Strategy P&L</h3>
-    <p id="strategy2-pnl">--</p>
-</div>
-<div class="panel">
-    <h3>Open Positions</h3>
-    <div id="strategy2-open-positions-table"></div>
-</div>
-<div class="panel">
-    <h3>Order History</h3>
-    <div id="strategy2-order-history-table"></div>
-</div>
+
+{% block title %}Strategy 2 Dashboard{% endblock %}
+
+{% block head %}
+<style>
+    .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .panel { background: #f9f9f9; padding: 15px; border-radius: 5px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
+    th { background-color: #007bff; color: white; }
+</style>
 {% endblock %}
 
-{% block scripts %}
+{% block content %}
+<h1>Strategy 2 Dashboard</h1>
+
+<div class="grid-container">
+    <div class="panel">
+        <h2>Selected Stocks for Today</h2>
+        <div id="selected-stocks">
+            <p>Loading...</p>
+        </div>
+    </div>
+    <div class="panel">
+        <h2>Strategy P&L</h2>
+        <p id="pnl">Loading...</p>
+    </div>
+</div>
+
+<div class="panel" style="margin-top: 20px;">
+    <h2>Open Positions</h2>
+    <div id="open-positions">
+        <p>Loading...</p>
+    </div>
+</div>
+
+<div class="panel" style="margin-top: 20px;">
+    <h2>Order History</h2>
+    <div id="order-history">
+        <p>Loading...</p>
+    </div>
+</div>
+
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        const statusInterval = setInterval(updateStatus, 2500);
+        const statusInterval = setInterval(updateStatus, 5000); // Update every 5 seconds
 
         function updateStatus() {
             fetch('/status')
                 .then(response => response.json())
                 .then(data => {
-                    updateStrategy2UI(data.strategy2);
+                    if (!data || !data.strategy2) return;
+                    const s2 = data.strategy2;
+
+                    // Update P&L
+                    document.getElementById('pnl').textContent = `Total P&L: ${s2.pnl ? s2.pnl.toFixed(2) : '0.00'}`;
+
+                    // Update Selected Stocks
+                    const selectedDiv = document.getElementById('selected-stocks');
+                    if (data.strategy2_selected_stocks && data.strategy2_selected_stocks.length > 0) {
+                        let html = '<ul>';
+                        data.strategy2_selected_stocks.forEach(stock => {
+                            html += `<li>${stock.tradingsymbol}</li>`;
+                        });
+                        html += '</ul>';
+                        selectedDiv.innerHTML = html;
+                    } else {
+                        selectedDiv.innerHTML = '<p>No stocks selected for today.</p>';
+                    }
+
+                    // Update Open Positions
+                    const positionsDiv = document.getElementById('open-positions');
+                    if (s2.open_positions && s2.open_positions.length > 0) {
+                        let table = '<table><tr><th>Symbol</th><th>Qty</th><th>Avg Price</th><th>LTP</th><th>P&L</th></tr>';
+                        s2.open_positions.forEach(p => {
+                            table += `<tr>
+                                <td>${p.tradingsymbol}</td>
+                                <td>${p.quantity}</td>
+                                <td>${p.average_price.toFixed(2)}</td>
+                                <td>${p.last_price.toFixed(2)}</td>
+                                <td>${p.pnl.toFixed(2)}</td>
+                            </tr>`;
+                        });
+                        table += '</table>';
+                        positionsDiv.innerHTML = table;
+                    } else {
+                        positionsDiv.innerHTML = '<p>No open positions.</p>';
+                    }
+
+                    // Update Order History
+                    const historyDiv = document.getElementById('order-history');
+                    if (s2.order_history && s2.order_history.length > 0) {
+                        let table = '<table><tr><th>Symbol</th><th>Type</th><th>Qty</th><th>Price</th><th>Status</th></tr>';
+                        s2.order_history.slice(-10).reverse().forEach(o => { // Show last 10 orders
+                            table += `<tr>
+                                <td>${o.tradingsymbol}</td>
+                                <td>${o.transaction_type}</td>
+                                <td>${o.quantity}</td>
+                                <td>${o.price.toFixed(2)}</td>
+                                <td>${o.status}</td>
+                            </tr>`;
+                        });
+                        table += '</table>';
+                        historyDiv.innerHTML = table;
+                    } else {
+                        historyDiv.innerHTML = '<p>No order history.</p>';
+                    }
                 })
                 .catch(error => console.error('Error fetching status:', error));
         }
-
-        function updateStrategy2UI(strategy2) {
-            if (!strategy2) return;
-            document.getElementById('strategy2-pnl').textContent = `₹${Number(strategy2.pnl).toLocaleString()}`;
-
-            for (const symbol in strategy2.ltp) {
-                const ltpSpan = document.getElementById(`ltp-${symbol}`);
-                if (ltpSpan) {
-                    ltpSpan.textContent = `₹${strategy2.ltp[symbol]}`;
-                }
-            }
-
-            createTable('strategy2-open-positions-table', ['Symbol', 'Qty', 'Avg. Price', 'LTP', 'P&L'], strategy2.open_positions, item => [item.tradingsymbol, item.quantity, `₹${item.average_price.toFixed(2)}`, `₹${item.last_price.toFixed(2)}`, `₹${item.pnl.toFixed(2)}`]);
-            createTable('strategy2-order-history-table', ['Symbol', 'Type', 'Qty', 'Price', 'Status'], strategy2.order_history, item => [item.tradingsymbol, item.transaction_type, item.quantity, `₹${item.price}`, item.status]);
-        }
-
-        function createTable(containerId, headers, data, rowMapper) {
-            const container = document.getElementById(containerId);
-            container.innerHTML = '';
-            if (!data || data.length === 0) {
-                container.textContent = `No ${containerId.replace('-table', '').replace('strategy2-', '').replace('-', ' ')} found.`;
-                return;
-            }
-
-            const table = document.createElement('table');
-            const thead = table.createTHead();
-            const tbody = table.createTBody();
-            let row = thead.insertRow();
-            headers.forEach(headerText => {
-                let th = document.createElement('th');
-                th.textContent = headerText;
-                row.appendChild(th);
-            });
-
-            data.forEach(item => {
-                row = tbody.insertRow();
-                rowMapper(item).forEach(cellData => {
-                    let cell = row.insertCell();
-                    cell.textContent = cellData;
-                });
-            });
-            container.appendChild(table);
-        }
-
-        updateStatus();
+        updateStatus(); // Initial call
     });
 </script>
 {% endblock %}

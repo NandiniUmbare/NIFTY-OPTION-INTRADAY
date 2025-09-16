@@ -1,6 +1,6 @@
-Flask==3.0.0
-pandas==2.2.0
-kiteconnect==5.0.1
-requests==2.32.5
+Flask
+pandas
+kiteconnect
 pandas-ta
 schedule
+pya3

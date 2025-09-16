@@ -1,57 +1,62 @@
-# Nifty VWAP Strategy Trading Terminal
+# Trading Terminal Application
 
-This is a web-based trading terminal that implements a simple VWAP (Volume Weighted Average Price) crossover strategy for Nifty futures. It connects to the Kite Connect API to fetch real-time data and account information.
-
-**Disclaimer:** This is a proof-of-concept application for educational purposes. It is not intended for live trading without thorough testing and understanding of the risks involved.
+This is a Flask-based web application for executing automated trading strategies. It is designed to use Alice Blue for market data and Kite for order execution.
 
 ## Features
 
--   **Web-based UI:** A clean and simple web interface to monitor the strategy and your account.
--   **Kite Connect Integration:** Connects to your Kite account to fetch your funds, holdings, positions, and orders.
--   **VWAP Crossover Strategy:** A simulated trading strategy based on the VWAP indicator.
--   **Real-time Updates:** The UI polls the backend periodically to display the latest market and account data.
+- **Dual Broker Integration:** Uses Alice Blue for data feeds and Kite for order placement and portfolio management.
+- **Strategy 2 (AVWAP Breakout):** An automated trading strategy that:
+    - Selects stocks daily based on market sentiment and liquidity.
+    - Executes trades on a 5-minute timeframe using an Anchored VWAP breakout system.
+- **Web Interface:** A simple UI to monitor account status, positions, and strategy performance.
 
-## Requirements
+## Setup and Configuration
 
--   Python 3.6+
--   pip
+**1. Install Dependencies:**
 
-## Installation
+Install the required Python packages using pip:
+```bash
+pip install -r requirements.txt
+```
 
-1.  Clone the repository:
-    ```bash
-    git clone <repository-url>
-    cd <repository-directory>
-    ```
+**2. Configure Credentials:**
 
-2.  Install the required Python packages:
-    ```bash
-    pip install -r requirements.txt
-    ```
+Before running the application, you **must** add your API credentials to the `config.ini` file.
 
-## Usage
+- Open the `config.ini` file in a text editor.
+- Fill in your details for both `[KITE]` and `[ALICEBLUE]` sections.
 
-1.  Run the web application:
-    ```bash
-    python web_app.py
-    ```
+```ini
+[KITE]
+api_key = YOUR_KITE_API_KEY
+api_secret = YOUR_KITE_API_SECRET
 
-2.  Open your web browser and navigate to `http://127.0.0.1:8080`.
+[ALICEBLUE]
+user_id = YOUR_ALICEBLUE_USER_ID
+api_key = YOUR_ALICEBLUE_API_KEY
 
-3.  You will be prompted to log in with your Kite API Key and API Secret.
+[strategy2]
+LIQUIDITY_THRESHOLD = 10000000
+CAPITAL_PER_TRADE = 10000
+DAILY_STOP_LOSS = -3000
+```
 
-4.  After entering your credentials, you will be redirected to the Kite login page to authorize the application.
+**3. Run the Application:**
 
-5.  Once authorized, you will be redirected back to the trading terminal, where you can see your account details and the strategy status.
+Start the Flask web server by running:
+```bash
+python web_app.py
+```
+The application will be available at `http://127.0.0.1:8080`.
 
-### Important Note on Nifty 500 Stock List
+## Daily Login Procedure
 
-The `nifty500.txt` file in this repository contains a small sample of stocks for testing purposes. For the "Strategy 2" feature to work as intended, you must replace the contents of this file with the complete list of Nifty 500 stock symbols.
+For the application to work, you must authorize the API connections once per day for each broker:
 
-## Production Deployment
+1.  **Alice Blue:** Log in to the [Alice Blue web terminal](https://ant.aliceblueonline.com/) at least once.
+2.  **Kite:**
+    - Navigate to the application's login page in your browser.
+    - Click the "Login with Kite" button.
+    - This will redirect you to the Kite login page. Enter your Kite credentials to authorize the application.
 
-**Important Note:** The current implementation uses background threads for the strategy schedulers and traders. This approach works well for local development but is not suitable for a production WSGI environment (like the one used by PythonAnywhere).
-
-For a production deployment, you will need to refactor the background tasks to use a more robust solution, such as:
--   **A separate worker process and a task queue (e.g., Celery, RQ).**
--   **Cron jobs** to run the scheduled tasks.
+After these steps, the application will be fully connected and the strategies will run as scheduled.
