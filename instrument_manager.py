@@ -13,29 +13,6 @@ class InstrumentManager:
         self.instrument_map = {}
         self.is_initialized = False
 
-    def initialize_connections(self, kite_request_token=None):
-        """
-        Initializes the connections to both the broker and the data feed.
-        The Kite connection requires a request_token from the web login flow.
-        """
-        # Connect to Alice Blue
-        # Note: This requires the user to have logged into the web terminal once today.
-        if not self.data_feed.connect():
-            logging.error("Failed to connect to data feed (Alice Blue).")
-            return False
-
-        # Set the Kite access token from the login flow
-        if kite_request_token:
-            if not self.broker.set_access_token(kite_request_token):
-                logging.error("Failed to set access token for broker (Kite).")
-                return False
-        else:
-            logging.error("Kite request token is required to initialize connection.")
-            return False
-
-        logging.info("Broker and Data Feed connections initialized successfully.")
-        return True
-
     def build_instrument_map(self, exchange='NSE'):
         """
         Fetches instrument lists from both providers and builds a map.

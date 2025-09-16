@@ -16,6 +16,8 @@ from instrument_manager import InstrumentManager
 app_state = {
     "instrument_manager": InstrumentManager(),
     "strategy2_selected_stocks": [],
+    "aliceblue_connected": False,
+    "kite_connected": False,
 }
 state_lock = threading.Lock()
 app = Flask(__name__)
@@ -26,6 +28,7 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         manager = app_state.get('instrument_manager')
+        # Access to pages requires both connections to be active and the map to be built.
         if not manager or not manager.is_initialized:
             return redirect('/login')
         return f(*args, **kwargs)
@@ -84,36 +87,80 @@ def strategy2_page():
     return render_template('strategy2.html', selected_stocks=selected_stocks)
 
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    # The user must have already filled in their credentials in config.ini
-    if request.method == 'POST':
-        # Re-initialize the manager to ensure it loads credentials from config.ini
-        with state_lock:
-            app_state['instrument_manager'] = InstrumentManager()
-            manager = app_state['instrument_manager']
+@app.route('/login')
+def login_page():
+    # This page shows the login buttons and connection status
+    with state_lock:
+        alice_conn = app_state['aliceblue_connected']
+        kite_conn = app_state['kite_connected']
+    return render_template('login.html',
+                           aliceblue_connected=alice_conn,
+                           kite_connected=kite_conn,
+                           error=request.args.get('error'))
 
+@app.route('/login/aliceblue', methods=['POST'])
+def login_aliceblue():
+    # Step 1 of Alice Blue login: Redirect user to Alice Blue's site
+    with state_lock:
+        manager = app_state['instrument_manager']
+        # The data_feed object needs a method to generate the login URL
+        login_url = manager.data_feed.get_login_url()
+    if login_url:
+        return redirect(login_url)
+    return redirect('/login?error=Could not generate Alice Blue login URL.')
+
+@app.route('/login/kite', methods=['POST'])
+def login_kite():
+    # Step 1 of Kite login: Redirect user to Kite's site
+    with state_lock:
+        manager = app_state['instrument_manager']
         login_url = manager.broker.get_login_url()
-        if login_url:
-            return redirect(login_url)
-        else:
-            # This error typically means the API keys in config.ini are missing or invalid
-            return render_template('login.html', error="Could not generate Kite login URL. Please check your credentials in config.ini.")
+    if login_url:
+        return redirect(login_url)
+    return redirect('/login?error=Could not generate Kite login URL.')
 
-    return render_template('login.html', error=request.args.get('error'))
+@app.route('/connect/aliceblue')
+def aliceblue_callback():
+    # Step 2 of Alice Blue login: Handle the callback from their site
+    auth_code = request.args.get("auth_code")
+    if not auth_code:
+        return redirect('/login?error=AliceBlue_authentication_failed_no_auth_code')
+
+    with state_lock:
+        manager = app_state['instrument_manager']
+        # The user_id is also returned in the callback, which we may need
+        user_id = request.args.get("userId")
+        if manager.data_feed.generate_session(auth_code, user_id):
+            app_state['aliceblue_connected'] = True
+            logging.info("Alice Blue connection successful.")
+            # Check if Kite is also connected to build the map
+            if app_state['kite_connected']:
+                if not manager.build_instrument_map():
+                    return redirect('/login?error=Failed_to_build_instrument_map')
+        else:
+            return redirect('/login?error=Failed_to_generate_Alice_Blue_session')
+
+    return redirect('/login')
 
 @app.route('/connect/kite')
 def kite_callback():
+    # Step 2 of Kite login: Handle the callback
     request_token = request.args.get("request_token")
     if not request_token:
         return redirect('/login?error=Kite_authentication_failed')
     with state_lock:
         manager = app_state['instrument_manager']
-        if not manager.initialize_connections(kite_request_token=request_token):
-            return redirect('/login?error=Failed_to_initialize_connections')
-        if not manager.build_instrument_map():
-            return redirect('/login?error=Failed_to_build_instrument_map')
-        logging.info("Connections successful. Redirecting to dashboard.")
+        if manager.broker.set_access_token(request_token):
+            app_state['kite_connected'] = True
+            logging.info("Kite connection successful.")
+            # Check if Alice Blue is also connected to build the map
+            if app_state['aliceblue_connected']:
+                if not manager.build_instrument_map():
+                    return redirect('/login?error=Failed_to_build_instrument_map')
+        else:
+            return redirect('/login?error=Failed_to_generate_Kite_session')
+
+    # If both are connected, the login_required decorator will grant access to '/'
     return redirect('/')
 
 @app.route('/status')

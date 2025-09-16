@@ -6,23 +6,53 @@
     <title>Login - Trading Terminal</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f4f6f9; color: #333; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .login-container { background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        .login-container { background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 100%; max-width: 450px; text-align: center; }
         h1 { color: #007bff; margin-bottom: 20px; }
         p { margin-bottom: 25px; line-height: 1.6; }
-        button { width: 100%; padding: 12px 25px; font-size: 1.1em; cursor: pointer; border: none; border-radius: 5px; background-color: #007bff; color: white; transition: background-color 0.3s; }
-        button:hover { background-color: #0056b3; }
+        .login-step { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .login-step h2 { font-size: 1.2em; color: #333; margin-top: 0; margin-bottom: 10px; }
+        button { width: 100%; padding: 12px 25px; font-size: 1.1em; cursor: pointer; border: none; border-radius: 5px; color: white; transition: background-color 0.3s; }
+        .btn-alice { background-color: #d9534f; }
+        .btn-alice:hover { background-color: #c9302c; }
+        .btn-kite { background-color: #007bff; }
+        .btn-kite:hover { background-color: #0056b3; }
+        .status { font-weight: bold; }
+        .status.connected { color: #28a745; }
+        .status.disconnected { color: #dc3545; }
         .error { color: #dc3545; margin-top: 20px; font-weight: bold; }
     </style>
 </head>
 <body>
     <div class="login-container">
         <h1>Trading Terminal Login</h1>
-        <p>Please ensure you have entered your API credentials in the <code>config.ini</code> file before proceeding.</p>
-        <form action="/login" method="post">
-            <button type="submit">Login with Kite</button>
-        </form>
+        <p>Please ensure your credentials are in <code>config.ini</code>. You must log in to both services to begin.</p>
+
+        <div class="login-step">
+            <h2>Step 1: Data Connection</h2>
+            <p>Status: <span class="status {{ 'connected' if aliceblue_connected else 'disconnected' }}">
+                {{ 'Connected' if aliceblue_connected else 'Not Connected' }}
+            </span></p>
+            {% if not aliceblue_connected %}
+            <form action="/login/aliceblue" method="post">
+                <button type="submit" class="btn-alice">Login with Alice Blue</button>
+            </form>
+            {% endif %}
+        </div>
+
+        <div class="login-step">
+            <h2>Step 2: Order Connection</h2>
+            <p>Status: <span class="status {{ 'connected' if kite_connected else 'disconnected' }}">
+                {{ 'Connected' if kite_connected else 'Not Connected' }}
+            </span></p>
+            {% if not kite_connected %}
+            <form action="/login/kite" method="post">
+                <button type="submit" class="btn-kite">Login with Kite</button>
+            </form>
+            {% endif %}
+        </div>
+
         {% if error %}
-            <p class="error">{{ error }}</p>
+            <p class="error">Error: {{ error }}</p>
         {% endif %}
     </div>
 </body>

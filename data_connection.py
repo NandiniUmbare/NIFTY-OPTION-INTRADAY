@@ -2,6 +2,8 @@ import configparser
 import logging
 from pya3 import *
 from datetime import datetime, timedelta
+import hashlib
+import requests
 
 class DataFeed:
     def __init__(self):
@@ -20,37 +22,63 @@ class DataFeed:
         config = configparser.ConfigParser()
         config.read('config.ini')
         try:
-            self.user_id = config.get('ALICEBLUE', 'user_id')
-            self.api_key = config.get('ALICEBLUE', 'api_key')
+            self.user_id_config = config.get('ALICEBLUE', 'user_id').strip()
+            self.api_key = config.get('ALICEBLUE', 'api_key').strip()
+            self.api_secret = config.get('ALICEBLUE', 'api_secret').strip()
         except (configparser.NoSectionError, configparser.NoOptionError) as e:
             logging.error(f"Credentials for Alice Blue not found in config.ini: {e}")
-            self.user_id = None
+            self.user_id_config = None
             self.api_key = None
+            self.api_secret = None
 
-    def connect(self):
+    def get_login_url(self):
         """
-        Connects to the Alice Blue API and establishes a session.
-        NOTE: The user must have logged into the Alice Blue web terminal (ant.aliceblueonline.com)
-        at least once on the current day for this to work.
+        Generates the login URL for the user to authenticate with Alice Blue.
         """
-        if not self.user_id or not self.api_key:
-            logging.error("Cannot connect: Alice Blue credentials are not loaded.")
+        if not self.api_key:
+            return None
+        # The appcode parameter should be the user's client ID, not the API key.
+        # This seems counter-intuitive but matches some third-party library flows.
+        # Let's try with api_key first as per the direct doc link.
+        return f"https://ant.aliceblueonline.com/?appcode={self.api_key}"
+
+    def generate_session(self, auth_code, user_id_from_callback):
+        """
+        Generates a user session by exchanging the auth_code for a session ID.
+        This implements the SHA-256 checksum flow.
+        """
+        if not all([self.api_key, self.api_secret]):
+            logging.error("Cannot generate session: Alice Blue API key or secret not loaded.")
             return False
 
-        try:
-            self.alice = Aliceblue(user_id=self.user_id, api_key=self.api_key)
-            session_info = self.alice.get_session_id()
+        # 1. Create the checksum
+        combined_string = user_id_from_callback + auth_code + self.api_secret
+        checksum = hashlib.sha256(combined_string.encode()).hexdigest()
 
-            if session_info.get('stat') == 'Ok' and session_info.get('sessionID'):
-                self.session_id = session_info['sessionID']
-                logging.info("Successfully connected to Alice Blue and got session ID.")
+        # 2. Make the POST request to get the session
+        url = "https://ant.aliceblueonline.com/open-api/od-rest/v1/vendor/getUserDetails"
+        payload = {"checkSum": checksum}
+
+        try:
+            response = requests.post(url, json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("stat") == "Ok" and data.get("userSession"):
+                self.session_id = data["userSession"]
+                # Now that we have a session, we can initialize the pya3 object
+                # We use the user_id from the callback, as that's the authenticated one.
+                self.alice = Aliceblue(user_id=user_id_from_callback, api_key=self.api_key, session_id=self.session_id)
+                logging.info("Successfully generated Alice Blue session.")
                 return True
             else:
-                logging.error(f"Failed to get Alice Blue session ID: {session_info.get('emsg', 'Unknown error')}")
-                self.session_id = None
+                logging.error(f"Failed to generate Alice Blue session: {data.get('emsg', 'Unknown error')}")
                 return False
+        except requests.exceptions.RequestException as e:
+            logging.error(f"HTTP error while generating Alice Blue session: {e}")
+            return False
         except Exception as e:
-            logging.error(f"An exception occurred during Alice Blue connection: {e}")
+            logging.error(f"An unexpected error occurred during Alice Blue session generation: {e}")
             return False
 
     def get_historical_data(self, instrument, from_date, to_date, interval, is_index=False):
